@@ -16,4 +16,9 @@ Current Count
 current
 ```
 Prints the current value of the count for the current channel
-
+<br /><br />
+High Score
+```
+hs
+```
+Prints the highscore of the count for the current channel

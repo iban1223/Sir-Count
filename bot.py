@@ -96,11 +96,11 @@ async def on_message(message):
                 current.resetCount()                        #Reseting the count upon a mess up of it
                 await message.add_reaction('❌')
                 await channel.send('You broke the count!')  #Sending the count has been broken
-        elif not (text.isnumeric()):
+        elif (not (text.isnumeric()) )& (not (text.startswith('sc!', 0, 4))):   #Checks to see if it is not numeric or is not a command
             channel = current.displayChannel()
             current.resetCount()                            #Reseting the count upon a mess up of it
             await message.add_reaction('❌')
-            await channel.send('Only Count here please!')    #Sending the count has been broken
+            await channel.send('Only Count here please!')   #Sending the count has been broken
     await bot.process_commands(message)
 
 #Search List function
