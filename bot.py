@@ -1,5 +1,5 @@
 # bot.py
-from asyncio.windows_events import NULL
+from asyncio.windows_events import NULL, PipeServer
 import os
 
 from discord.ext import commands
@@ -38,13 +38,12 @@ def findData(data, start):
 def writeCounts(file):
     counts = bot.counts
     for countsIndex in counts:
-        place = findData(bot.data, str(countsIndex.displayChannel()))
+        place = findData(bot.data, str('c ' + countsIndex.displayChannel()))
         if ( place == -1 ):
-            bot.data.append(str(countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh()) + '\n')
+            bot.data.append('c ' + str(countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh()) + '\n')
         else:
-            bot.data[place-1] = str(countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh()) + '\n'
+            bot.data[place-1] = str('c ' + countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh()) + '\n'
     writeData(file, bot.data)
-    print("\nData written succesfully")
 
 #Function to read all counts data from a file
 def readCounts():
@@ -52,8 +51,28 @@ def readCounts():
     data = bot.data
     for dataIndex in data:
         line = dataIndex.split()
-        counts.append(count(line[0], int(line[1]), int(line[2])))
-    print("\nData read succesfully")
+        if line[0] == 'c':
+            counts.append(count(line[1], int(line[2]), int(line[3])))
+
+#Function to write all people data to a file
+def writePeople(file):
+    people = bot.people
+    for peopleIndex in people:
+        place = findData(bot.data, str('p ' + peopleIndex.showName()))
+        if ( place == -1 ):
+            bot.data.append('p ' + str(peopleIndex.showName()) + ' ' + str(peopleIndex.showScore()) + '\n')
+        else:
+            bot.data[place-1] = 'p ' + str(peopleIndex.showName()) + ' ' + str(peopleIndex.showScore())  + '\n'
+    writeData(file, bot.data)
+
+#Function to read all People data from a file
+def readPeople():
+    people = bot.people
+    data = bot.data
+    for dataIndex in data:
+        line = dataIndex.split()
+        if line[0] == 'p':
+            people.append(person(line[1], int(line[2])))
 
 # Counting Class
 class count:
@@ -84,7 +103,27 @@ class count:
     def displayHigh(self):
         return self.highscore
 
+# Person Class
+class person:
+    #Initializing function
+    def __init__(self, name, countScore):
+        self.countScore = countScore
+        self.name = name
+    #Returns the name
+    def showName(self):
+        return self.name
+    #Add to countScore
+    def addScore(self):
+        self.countScore += 1
+    #Resets countScore
+    def resetScore(self):
+        self.countScore = 0
+    #Returns countScore
+    def showScore(self):
+        return self.countScore
+
 bot.counts = []                                             #The list of all counts
+bot.people = []
 bot.data = readData('server.txt')
 
 # Command Definitions
@@ -104,9 +143,12 @@ async def startCount(ctx):
 @bot.command(name='cc', help='Displays the count for the current channel')
 async def check_count(ctx):
     current = searchList(ctx.channel, bot.counts)           #Count variable for the current channel
-    count = current.displayCount()                          #The value of the count
-    print(f'\nThe count is: ' + (str(count)))
-    await ctx.send('The current count is ' + (str(count)) + '. The next number is ' + (str(count+1)))  #Sending the count to the channel
+    if (current != NULL):
+        count = current.displayCount()                          #The value of the count
+        print(f'\nThe count is: ' + (str(count)))
+        await ctx.send('The current count is ' + (str(count)) + '. The next number is ' + (str(count+1)))  #Sending the count to the channel
+    else:
+        await ctx.send('There is no count here!')
 
 #Prints the current highscore of the channel
 @bot.command(name='hs', help='Prints the highscore for the channel')
@@ -117,20 +159,38 @@ async def returnHighScore(ctx):
     await channel.send('The highscore is ' + str(highscore))
 
 #Saves counts to file
-@bot.command(name='save')
+@bot.command(name='saveCount', help='Manual save of the current scores and counts')
 async def saveCounts():
     writeCounts('server.txt')
 
 #Loads counts from file
-@bot.command(name='load')
+@bot.command(name='loadCount', help='Manual load of counts and scores')
 async def loadCounts():
     readCounts()
+
+#Saves people to file
+@bot.command(name='savePeople', help='Manual save of the current people and their counts')
+async def savePeople():
+    writePeople('server.txt')
+
+#Loads people from file
+@bot.command(name='loadPeople', help='Manual load of people and their counts')
+async def loadPeople():
+    readPeople()
+
+#Displays authors current score
+@bot.command(name='ps', help='Prints your current correct number score')
+async def showPersonalScore(ctx):
+    author = searchName(ctx.author, bot.people)
+    score = author.showScore()
+    await ctx.channel.send('Your current consecutive counts is ' + str(score))
 
 # Event detection systems
 #Triggers upon bot being ready
 @bot.event
 async def on_ready():
     await loadCounts()
+    await loadPeople()
     print(f'{bot.user.name} has connected to Discord!')
 
 #Triggers upon a message being sent
@@ -142,27 +202,32 @@ async def on_message(message):
         return
     elif len(bot.counts) != 0:
         current = searchList(message.channel, bot.counts)   #Current is the count for the channel
+        currentPerson = searchName(author, bot.people)
+        if currentPerson == NULL:
+            bot.people.append(person(str(author), 0))
+            currentPerson = searchName(author, bot.people)
         if text.isnumeric() & (current != NULL):            #Making sure current is in the list and message is a number
             if int(text) == (current.displayCount() + 1):   #Confirming its the correct number
+                currentPerson.addScore()
                 if (current.displayCount() + 1) > current.displayHigh():    #Checking to see if the new count is a new highscore
                     current.setHigh(current.displayCount() + 1)
                     await message.add_reaction('☑️')
                 else:
                     await message.add_reaction('✅')
                 current.addCount()
-                channel = current.displayChannel()
                 await message.channel.send(current.displayCount())  #Sending the new number
             else:
-                channel = current.displayChannel()
+                currentPerson.resetScore()
                 current.resetCount()                        #Reseting the count upon a mess up of it
                 await message.add_reaction('❌')
                 await message.channel.send('You broke the count!')  #Sending the count has been broken
         elif (not (text.isnumeric()) )& (not (text.startswith('sc!', 0, 4))):   #Checks to see if it is not numeric or is not a command
-            channel = current.displayChannel()
             current.resetCount()                            #Reseting the count upon a mess up of it
+            currentPerson.resetScore()
             await message.add_reaction('❌')
             await message.channel.send('Only Count here please!')   #Sending the count has been broken
     await saveCounts()
+    await savePeople()
     await bot.process_commands(message)
 
 #Search List function
@@ -170,6 +235,14 @@ def searchList(element, list):
     element = str(element)
     for listIndex in list:
         if listIndex.displayChannel() == element:
+            return listIndex
+    return NULL
+
+#Search Names function
+def searchName(element, list):
+    element = str(element)
+    for listIndex in list:
+        if listIndex.showName() == element:
             return listIndex
     return NULL
 
