@@ -11,6 +11,40 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+# Setting the command prefix
+bot = commands.Bot(command_prefix='sc!')
+
+# File reading editing and printing handlers
+#Reading in file
+def readData(file):
+    with open(file, 'r') as file:
+        data = file.readlines()                                 #read a list of lines into data
+    return data
+
+#Writing Data to a file
+def writeData(file, data):
+    with open(file, 'w') as file:
+        file.writelines(data)                                   #writing lines to the file
+
+#Returns the line number of a line starting with a value
+def findData(data, start):
+    x = 0
+    for dataIndex in data:
+        x += 1
+        if dataIndex.startswith(start, 0, len(start)):
+            return x
+    return -1
+
+def writeCounts(file):
+    counts = bot.counts
+    for countsIndex in counts:
+        place = findData(bot.data, str(countsIndex.displayChannel()))
+        if ( place == -1 ):
+            bot.data.append(str(countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh()) + '\n')
+        else:
+            bot.data[place-1] = str(countsIndex.displayChannel()) + ' ' + str(countsIndex.displayCount()) + ' ' + str(countsIndex.displayHigh() + '\n')
+    writeData(file, bot.data)
+
 # Counting Class
 class count:
     #Initializing function
@@ -24,6 +58,9 @@ class count:
     #Returns the channel of the count
     def displayChannel(self):
         return self.cur_channel
+    #Sets the value of the count
+    def setCount(self, number):
+        self.number = number
     #Adds 2 to the value of the count
     def addCount(self):
         self.number += 2
@@ -37,20 +74,21 @@ class count:
     def displayHigh(self):
         return self.highscore
 
-# Setting the command prefix
-bot = commands.Bot(command_prefix='sc!')
-
 bot.counts = []                                             #The list of all counts
+bot.data = readData('server.txt')
 
 # Command Definitions
 #Start Count Command
 @bot.command(name='sc', help='Starts the count for the current channel')
 async def startCount(ctx):
-    bot.counts.append(count(ctx.channel, 0, 0))             #Adding the current channel to the list of counting channels
-    print(f'\nA count has been started')                    
-    channel = ctx.channel
-    await channel.send('A count has begun!')                #Sending that a count has started
-
+    if (searchList(ctx.channel, bot.counts) == NULL):
+        bot.counts.append(count(ctx.channel, 0, 0))             #Adding the current channel to the list of counting channels
+        print(f'\nA count has been started')                    
+        channel = ctx.channel
+        await channel.send('A count has begun!')                #Sending that a count has started
+    else:
+        await ctx.channel.send('There is already a count here')
+        
 #Check Count Command
 @bot.command(name='current', help='Displays the count for the current channel')
 async def check_count(ctx):
@@ -67,6 +105,11 @@ async def returnHighScore(ctx):
     highscore = current.displayHigh()
     await channel.send('The highscore is ' + str(highscore))
 
+#Saves counts to file
+@bot.command(name='save')
+async def saveCounts(ctx):
+    writeCounts('server.txt')
+
 # Event detection systems
 #Triggers upon bot being ready
 @bot.event
@@ -77,7 +120,8 @@ async def on_ready():
 @bot.event
 async def on_message(message):
     text = message.content                                  #Text of the message
-    if message.author == bot.user:                          #Confirming the author isn't a bot
+    author = message.author
+    if author == bot.user:                                  #Confirming the author isn't a bot
         return
     elif len(bot.counts) != 0:                              #Checking there is a count occuring
         current = searchList(message.channel, bot.counts)   #Current is the count for the channel
