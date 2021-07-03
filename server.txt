@@ -1,2 +1,6 @@
-c test2 0 15
-p Iban1223#5339 0
+c test2 0 121
+p Iban1223#5339 15
+p thag#6098 0
+c test1 0 13
+c middle-tier-counters 3 3
+c bottom-tier-counters 1 1

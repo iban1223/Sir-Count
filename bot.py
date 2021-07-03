@@ -1,6 +1,7 @@
 # bot.py
 from asyncio.windows_events import NULL, PipeServer
 import os
+import discord
 
 from discord.ext import commands
 
@@ -92,7 +93,7 @@ class count:
         self.number = number
     #Adds 2 to the value of the count
     def addCount(self):
-        self.number += 2
+        self.number += 1
     #Sets the value of the count to zero
     def resetCount(self):
         self.number = 0
@@ -124,11 +125,13 @@ class person:
 
 bot.counts = []                                             #The list of all counts
 bot.people = []
+bot.previous = ''
 bot.data = readData('server.txt')
 
 # Command Definitions
 #Start Count Command
 @bot.command(name='sc', help='Starts the count for the current channel')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def startCount(ctx):
     if (searchList(ctx.channel, bot.counts) == NULL):
         bot.counts.append(count(ctx.channel, 0, 0))             #Adding the current channel to the list of counting channels
@@ -160,26 +163,31 @@ async def returnHighScore(ctx):
 
 #Saves counts to file
 @bot.command(name='saveCount', help='Manual save of the current scores and counts')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def saveCounts():
     writeCounts('server.txt')
 
 #Loads counts from file
 @bot.command(name='loadCount', help='Manual load of counts and scores')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def loadCounts():
     readCounts()
 
 #Saves people to file
 @bot.command(name='savePeople', help='Manual save of the current people and their counts')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def savePeople():
     writePeople('server.txt')
 
 #Loads people from file
 @bot.command(name='loadPeople', help='Manual load of people and their counts')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def loadPeople():
     readPeople()
 
 #Displays authors current score
 @bot.command(name='ps', help='Prints your current correct number score')
+@commands.has_any_role(  "Protectors of the Count", "Knights of the Count")
 async def showPersonalScore(ctx):
     author = searchName(ctx.author, bot.people)
     score = author.showScore()
@@ -198,32 +206,35 @@ async def on_ready():
 async def on_message(message):
     text = message.content                                  #Text of the message
     author = message.author
+    currentPerson = searchName(author, bot.people)
     if author == bot.user:                                  #Confirming the author isn't a bot
         return
     elif len(bot.counts) != 0:
         current = searchList(message.channel, bot.counts)   #Current is the count for the channel
-        currentPerson = searchName(author, bot.people)
         if currentPerson == NULL:
             bot.people.append(person(str(author), 0))
             currentPerson = searchName(author, bot.people)
         if text.isnumeric() & (current != NULL):            #Making sure current is in the list and message is a number
             if int(text) == (current.displayCount() + 1):   #Confirming its the correct number
                 currentPerson.addScore()
+                await checkCons(currentPerson.showScore(), author)
                 if (current.displayCount() + 1) > current.displayHigh():    #Checking to see if the new count is a new highscore
                     current.setHigh(current.displayCount() + 1)
                     await message.add_reaction('☑️')
                 else:
                     await message.add_reaction('✅')
                 current.addCount()
-                await message.channel.send(current.displayCount())  #Sending the new number
+                #await message.channel.send(current.displayCount())  #Sending the new number
             else:
                 currentPerson.resetScore()
                 current.resetCount()                        #Reseting the count upon a mess up of it
+                await checkCons(currentPerson.showScore(), author)
                 await message.add_reaction('❌')
                 await message.channel.send('You broke the count!')  #Sending the count has been broken
         elif (not (text.isnumeric()) )& (not (text.startswith('sc!', 0, 4))):   #Checks to see if it is not numeric or is not a command
             current.resetCount()                            #Reseting the count upon a mess up of it
             currentPerson.resetScore()
+            await checkCons(currentPerson.showScore(), author)
             await message.add_reaction('❌')
             await message.channel.send('Only Count here please!')   #Sending the count has been broken
     await saveCounts()
@@ -245,6 +256,25 @@ def searchName(element, list):
         if listIndex.showName() == element:
             return listIndex
     return NULL
+
+#Detect Consecutive counts and change role function
+async def checkCons(number, user):
+    roleLow = discord.utils.get(user.guild.roles, name="Bottom Tier Counters")
+    roleMid = discord.utils.get(user.guild.roles, name="Middle Tier Counters")
+    roleHigh = discord.utils.get(user.guild.roles, name="Top Tier Counters")
+    if (number >= 10) & (roleLow in user.roles):
+        await user.remove_roles(roleLow)
+        await user.add_roles(roleMid)
+    elif (number == 50) & (roleMid in user.roles):
+        await user.remove_roles(roleMid)
+        await user.add_roles(roleHigh)
+    if (number == 0):
+        if roleMid in user.roles:
+            await user.remove_roles(roleMid)
+            await user.add_roles(roleLow)
+        elif roleHigh in user.roles:
+            await user.remove_roles(roleHigh)
+            await user.add_roles(roleMid)
 
 #Running the bot
 bot.run(TOKEN)
